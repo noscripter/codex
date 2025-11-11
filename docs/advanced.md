@@ -2,6 +2,67 @@
 
 If you already lean on Codex every day and just need a little more control, this page collects the knobs you are most likely to reach for: tweak defaults in [Config](./config.md), add extra tools through [Model Context Protocol support](#model-context-protocol), and script full runs with [`codex exec`](./exec.md). Jump to the section you need and keep building.
 
+## Tool Call Workflow {#tool-call-workflow}
+
+Codex keeps each turn’s tool execution behind a “tool gate,” a readiness flag that defers shell or MCP activity until any prerequisite background work (for example the ghost snapshot task) finishes. The flow below shows how the gate coordinates turn setup, optional ghost snapshots, and the actual tool dispatch.
+
+```
+┌────────────┐   start turn   ┌────────────────────────────┐
+│User / CLI  │───────────────▶│Session.spawn_task / run_task│
+└────────────┘                └────────────┬───────────────┘
+                                            │
+                                            │TurnContext created
+                                            ▼
+                                    ┌────────────────┐
+                                    │tool_call_gate │◀──┐
+                                    └──────┬────────┘   │subscribe
+                                           │            │
+                                           │            │
+                                ┌──────────▼──────────┐ │
+                                │GhostSnapshotTask?   │ │spawn
+                                └─┬────────────────────┘ │
+                                  │                    │
+                                  │tokio::select!      │
+                                  │                    │
+                                  ▼ mark_ready(token)  │
+                          gate released / left locked  │
+                                                       │
+                                                       ▼
+                           ┌──────────────────────────────────┐
+                           │ToolCallRuntime::handle_tool_call │
+                           └───────────────┬──────────────────┘
+                                           │ wait_ready()
+                                           ▼
+                              ┌────────────────────────┐
+                              │Parallel lock (RwLock) │
+                              └──────────┬────────────┘
+                                         │
+                                         ▼
+                              ┌────────────────────────┐
+                              │ToolRouter.dispatch(...)│
+                              └──────────┬────────────┘
+                                         │
+                                         ▼
+                    ┌───────────────────────────────┐
+                    │ResponseInputItem (tool output)│
+                    └──────────┬────────────────────┘
+                               │
+                               ▼
+               ┌───────────────────────────────────────┐
+               │Session emits events / records history  │
+               └───────────────────────────────────────┘
+                               │
+                               ▼
+                     ┌────────────────────┐
+                     │Model gets feedback │
+                     └────────────────────┘
+```
+
+Key points:
+- The per-turn `tool_call_gate` starts closed; background tasks subscribe and must mark it ready before tools execute.
+- `ToolCallRuntime::handle_tool_call` waits on the gate, then chooses either a shared (parallel) or exclusive lock before dispatching via the router.
+- Tool outputs are recorded as `ResponseInputItem`s, rolled into conversation history, and fed back to the model to drive the next decision.
+
 ## Config quickstart {#config-quickstart}
 
 Most day-to-day tuning lives in `config.toml`: set approval + sandbox presets, pin model defaults, and add MCP server launchers. The [Config guide](./config.md) walks through every option and provides copy-paste examples for common setups.
