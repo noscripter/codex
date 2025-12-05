@@ -10,12 +10,13 @@ use tokio::time::Duration;
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
+use crate::bash::extract_bash_command;
 use crate::codex::Session;
 use crate::codex::TurnContext;
 use crate::exec::ExecToolCallOutput;
 use crate::exec::StreamOutput;
 use crate::exec_env::create_env;
-use crate::exec_policy::create_approval_requirement_for_command;
+use crate::exec_policy::create_exec_approval_requirement_for_command;
 use crate::protocol::BackgroundEventEvent;
 use crate::protocol::EventMsg;
 use crate::protocol::ExecCommandSource;
@@ -41,6 +42,7 @@ use super::UnifiedExecContext;
 use super::UnifiedExecError;
 use super::UnifiedExecResponse;
 use super::UnifiedExecSessionManager;
+use super::WARNING_UNIFIED_EXEC_SESSIONS;
 use super::WriteStdinRequest;
 use super::clamp_yield_time;
 use super::generate_chunk_id;
@@ -109,6 +111,11 @@ impl UnifiedExecSessionManager {
         }
     }
 
+    pub(crate) async fn release_process_id(&self, process_id: &str) {
+        let mut store = self.session_store.lock().await;
+        store.remove(process_id);
+    }
+
     pub(crate) async fn exec_command(
         &self,
         request: ExecCommandRequest,
@@ -127,7 +134,15 @@ impl UnifiedExecSessionManager {
                 request.justification,
                 context,
             )
-            .await?;
+            .await;
+
+        let session = match session {
+            Ok(session) => session,
+            Err(err) => {
+                self.release_process_id(&request.process_id).await;
+                return Err(err);
+            }
+        };
 
         let max_tokens = resolve_max_tokens(request.max_output_tokens);
         let yield_time_ms = clamp_yield_time(request.yield_time_ms);
@@ -153,8 +168,24 @@ impl UnifiedExecSessionManager {
         let has_exited = session.has_exited();
         let exit_code = session.exit_code();
         let chunk_id = generate_chunk_id();
-        let process_id = if has_exited {
-            None
+        let process_id = request.process_id.clone();
+        if has_exited {
+            self.release_process_id(&request.process_id).await;
+            let exit = exit_code.unwrap_or(-1);
+            Self::emit_exec_end_from_context(
+                context,
+                &request.command,
+                cwd,
+                output.clone(),
+                exit,
+                wall_time,
+                // We always emit the process ID in order to keep consistency between the Begin
+                // event and the End event.
+                Some(process_id),
+            )
+            .await;
+
+            session.check_for_sandbox_denial_with_text(&text).await?;
         } else {
             // Only store session if not exited.
             self.store_session(
@@ -163,44 +194,28 @@ impl UnifiedExecSessionManager {
                 &request.command,
                 cwd.clone(),
                 start,
-                request.process_id.clone(),
+                process_id,
             )
             .await;
-            Some(request.process_id.clone())
-        };
-        let original_token_count = approx_token_count(&text);
 
+            Self::emit_waiting_status(&context.session, &context.turn, &request.command).await;
+        };
+
+        let original_token_count = approx_token_count(&text);
         let response = UnifiedExecResponse {
             event_call_id: context.call_id.clone(),
             chunk_id,
             wall_time,
             output,
-            process_id: process_id.clone(),
+            process_id: if has_exited {
+                None
+            } else {
+                Some(request.process_id.clone())
+            },
             exit_code,
             original_token_count: Some(original_token_count),
             session_command: Some(request.command.clone()),
         };
-
-        if !has_exited {
-            Self::emit_waiting_status(&context.session, &context.turn, &request.command).await;
-        }
-
-        // If the command completed during this call, emit an ExecCommandEnd via the emitter.
-        if has_exited {
-            let exit = response.exit_code.unwrap_or(-1);
-            Self::emit_exec_end_from_context(
-                context,
-                &request.command,
-                cwd,
-                response.output.clone(),
-                exit,
-                response.wall_time,
-                // We always emit the process ID in order to keep consistency between the Begin
-                // event and the End event.
-                Some(request.process_id),
-            )
-            .await;
-        }
 
         Ok(response)
     }
@@ -421,9 +436,22 @@ impl UnifiedExecSessionManager {
             started_at,
             last_used: started_at,
         };
-        let mut store = self.session_store.lock().await;
-        Self::prune_sessions_if_needed(&mut store);
-        store.sessions.insert(process_id, entry);
+        let number_sessions = {
+            let mut store = self.session_store.lock().await;
+            Self::prune_sessions_if_needed(&mut store);
+            store.sessions.insert(process_id, entry);
+            store.sessions.len()
+        };
+
+        if number_sessions >= WARNING_UNIFIED_EXEC_SESSIONS {
+            context
+                .session
+                .record_model_warning(
+                    format!("The maximum number of unified exec sessions you can keep open is {WARNING_UNIFIED_EXEC_SESSIONS} and you currently have {number_sessions} sessions open. Reuse older sessions or close them to prevent automatic pruning of old session"),
+                    &context.turn
+                )
+                .await;
+        };
     }
 
     async fn emit_exec_end_from_entry(
@@ -498,7 +526,11 @@ impl UnifiedExecSessionManager {
         turn: &Arc<TurnContext>,
         command: &[String],
     ) {
-        let command_display = command.join(" ");
+        let command_display = if let Some((_, script)) = extract_bash_command(command) {
+            script.to_string()
+        } else {
+            command.join(" ")
+        };
         let message = format!("Waiting for `{command_display}`");
         session
             .send_event(
@@ -538,21 +570,25 @@ impl UnifiedExecSessionManager {
         context: &UnifiedExecContext,
     ) -> Result<UnifiedExecSession, UnifiedExecError> {
         let env = apply_unified_exec_env(create_env(&context.turn.shell_environment_policy));
+        let features = context.session.features();
         let mut orchestrator = ToolOrchestrator::new();
         let mut runtime = UnifiedExecRuntime::new(self);
+        let exec_approval_requirement = create_exec_approval_requirement_for_command(
+            &context.turn.exec_policy,
+            &features,
+            command,
+            context.turn.approval_policy,
+            &context.turn.sandbox_policy,
+            SandboxPermissions::from(with_escalated_permissions.unwrap_or(false)),
+        )
+        .await;
         let req = UnifiedExecToolRequest::new(
             command.to_vec(),
             cwd,
             env,
             with_escalated_permissions,
             justification,
-            create_approval_requirement_for_command(
-                &context.turn.exec_policy,
-                command,
-                context.turn.approval_policy,
-                &context.turn.sandbox_policy,
-                SandboxPermissions::from(with_escalated_permissions.unwrap_or(false)),
-            ),
+            exec_approval_requirement,
         );
         let tool_ctx = ToolCtx {
             session: context.session.as_ref(),
@@ -633,9 +669,9 @@ impl UnifiedExecSessionManager {
         collected
     }
 
-    fn prune_sessions_if_needed(store: &mut SessionStore) {
+    fn prune_sessions_if_needed(store: &mut SessionStore) -> bool {
         if store.sessions.len() < MAX_UNIFIED_EXEC_SESSIONS {
-            return;
+            return false;
         }
 
         let meta: Vec<(String, Instant, bool)> = store
@@ -646,7 +682,10 @@ impl UnifiedExecSessionManager {
 
         if let Some(session_id) = Self::session_id_to_prune_from_meta(&meta) {
             store.remove(&session_id);
+            return true;
         }
+
+        false
     }
 
     // Centralized pruning policy so we can easily swap strategies later.
