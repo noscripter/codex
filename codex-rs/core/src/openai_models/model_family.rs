@@ -116,6 +116,10 @@ impl ModelFamily {
     const fn default_auto_compact_limit(context_window: i64) -> i64 {
         (context_window * 9) / 10
     }
+
+    pub fn get_model_slug(&self) -> &str {
+        &self.slug
+    }
 }
 
 macro_rules! model_family {
@@ -259,7 +263,7 @@ pub fn find_family_for_model(slug: &str) -> ModelFamily {
             base_instructions: GPT_5_1_CODEX_MAX_INSTRUCTIONS.to_string(),
             apply_patch_tool_type: Some(ApplyPatchToolType::Freeform),
             shell_type: ConfigShellToolType::ShellCommand,
-            supports_parallel_tool_calls: true,
+            supports_parallel_tool_calls: false,
             support_verbosity: false,
             truncation_policy: TruncationPolicy::Tokens(10_000),
             context_window: Some(CONTEXT_WINDOW_272K),
@@ -275,7 +279,7 @@ pub fn find_family_for_model(slug: &str) -> ModelFamily {
             base_instructions: GPT_5_CODEX_INSTRUCTIONS.to_string(),
             apply_patch_tool_type: Some(ApplyPatchToolType::Freeform),
             shell_type: ConfigShellToolType::ShellCommand,
-            supports_parallel_tool_calls: true,
+            supports_parallel_tool_calls: false,
             support_verbosity: false,
             truncation_policy: TruncationPolicy::Tokens(10_000),
             context_window: Some(CONTEXT_WINDOW_272K),
