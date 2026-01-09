@@ -184,7 +184,7 @@ impl Tui {
     /// Emit a desktop notification now if the terminal is unfocused.
     /// Returns true if a notification was posted.
     pub fn notify(&mut self, message: impl AsRef<str>) -> bool {
-        if self.terminal_focused.load(Ordering::Relaxed) {
+        if effective_terminal_focused(self.terminal_focused.load(Ordering::Relaxed)) {
             return false;
         }
 
@@ -433,5 +433,134 @@ impl Tui {
             }
         }
         Ok(None)
+    }
+}
+
+fn effective_terminal_focused(terminal_focused: bool) -> bool {
+    if !terminal_focused {
+        return false;
+    }
+
+    // In tmux, the terminal may remain focused while the user switches to another pane/window.
+    // Treat the current pane as unfocused in that scenario so turn-complete/approval notifications
+    // still surface.
+    !matches!(tmux_pane_active(), Some(false))
+}
+
+fn tmux_pane_active() -> Option<bool> {
+    let pane = std::env::var_os("TMUX_PANE")?;
+    let output = std::process::Command::new("tmux")
+        .arg("display-message")
+        .arg("-p")
+        .arg("-t")
+        .arg(pane)
+        .arg("#{pane_active}")
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    match std::str::from_utf8(&output.stdout).ok()?.trim() {
+        "1" => Some(true),
+        "0" => Some(false),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+    use tempfile::TempDir;
+
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    struct EnvVarGuard {
+        key: &'static str,
+        original: Option<std::ffi::OsString>,
+    }
+
+    impl EnvVarGuard {
+        fn set_os(key: &'static str, value: std::ffi::OsString) -> Self {
+            let original = std::env::var_os(key);
+            unsafe {
+                std::env::set_var(key, value);
+            }
+            Self { key, original }
+        }
+
+        fn remove(key: &'static str) -> Self {
+            let original = std::env::var_os(key);
+            unsafe {
+                std::env::remove_var(key);
+            }
+            Self { key, original }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            unsafe {
+                match &self.original {
+                    Some(value) => std::env::set_var(self.key, value),
+                    None => std::env::remove_var(self.key),
+                }
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    fn write_fake_tmux(dir: &TempDir, output: &str) -> anyhow::Result<()> {
+        let tmux_path = dir.path().join("tmux");
+        std::fs::write(&tmux_path, format!("#!/bin/sh\necho {output}\n"))?;
+        std::fs::set_permissions(&tmux_path, std::fs::Permissions::from_mode(0o755))?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    fn prepend_path(dir: &TempDir) -> EnvVarGuard {
+        let original = std::env::var_os("PATH");
+        let mut paths = vec![dir.path().to_path_buf()];
+        if let Some(orig) = original.as_ref() {
+            paths.extend(std::env::split_paths(orig));
+        }
+        let joined = std::env::join_paths(paths).expect("join PATHs");
+        EnvVarGuard::set_os("PATH", joined)
+    }
+
+    #[test]
+    #[serial]
+    fn effective_terminal_focused_unfocused_stays_unfocused() {
+        let _tmux_guard = EnvVarGuard::remove("TMUX_PANE");
+        assert!(!effective_terminal_focused(false));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial]
+    fn tmux_inactive_pane_allows_notifications_while_terminal_focused() -> anyhow::Result<()> {
+        let dir = TempDir::new()?;
+        write_fake_tmux(&dir, "0")?;
+        let _path_guard = prepend_path(&dir);
+        let _tmux_guard = EnvVarGuard::set_os("TMUX_PANE", "%42".into());
+
+        assert!(!effective_terminal_focused(true));
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial]
+    fn tmux_active_pane_suppresses_notifications_when_terminal_focused() -> anyhow::Result<()> {
+        let dir = TempDir::new()?;
+        write_fake_tmux(&dir, "1")?;
+        let _path_guard = prepend_path(&dir);
+        let _tmux_guard = EnvVarGuard::set_os("TMUX_PANE", "%42".into());
+
+        assert!(effective_terminal_focused(true));
+        Ok(())
     }
 }
