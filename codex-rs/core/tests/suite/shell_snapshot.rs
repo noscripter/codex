@@ -71,6 +71,7 @@ async fn run_snapshot_command(command: &str) -> Result<SnapshotRun> {
         .submit(Op::UserTurn {
             items: vec![UserInput::Text {
                 text: "run unified exec with shell snapshot".into(),
+                text_elements: Vec::new(),
             }],
             final_output_json_schema: None,
             cwd,
@@ -79,6 +80,7 @@ async fn run_snapshot_command(command: &str) -> Result<SnapshotRun> {
             model: session_model,
             effort: None,
             summary: ReasoningSummary::Auto,
+            collaboration_mode: None,
         })
         .await?;
 
@@ -101,7 +103,7 @@ async fn run_snapshot_command(command: &str) -> Result<SnapshotRun> {
     })
     .await;
 
-    wait_for_event(&codex, |ev| matches!(ev, EventMsg::TaskComplete(_))).await;
+    wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     Ok(SnapshotRun {
         begin,
@@ -147,6 +149,7 @@ async fn run_shell_command_snapshot(command: &str) -> Result<SnapshotRun> {
         .submit(Op::UserTurn {
             items: vec![UserInput::Text {
                 text: "run shell_command with shell snapshot".into(),
+                text_elements: Vec::new(),
             }],
             final_output_json_schema: None,
             cwd,
@@ -155,6 +158,7 @@ async fn run_shell_command_snapshot(command: &str) -> Result<SnapshotRun> {
             model: session_model,
             effort: None,
             summary: ReasoningSummary::Auto,
+            collaboration_mode: None,
         })
         .await?;
 
@@ -177,7 +181,7 @@ async fn run_shell_command_snapshot(command: &str) -> Result<SnapshotRun> {
     })
     .await;
 
-    wait_for_event(&codex, |ev| matches!(ev, EventMsg::TaskComplete(_))).await;
+    wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     Ok(SnapshotRun {
         begin,
@@ -284,6 +288,7 @@ async fn shell_command_snapshot_still_intercepts_apply_patch() -> Result<()> {
         .submit(Op::UserTurn {
             items: vec![UserInput::Text {
                 text: "apply patch via shell_command with snapshot".into(),
+                text_elements: Vec::new(),
             }],
             final_output_json_schema: None,
             cwd: cwd.clone(),
@@ -292,10 +297,11 @@ async fn shell_command_snapshot_still_intercepts_apply_patch() -> Result<()> {
             model,
             effort: None,
             summary: ReasoningSummary::Auto,
+            collaboration_mode: None,
         })
         .await?;
 
-    wait_for_event(&codex, |ev| matches!(ev, EventMsg::TaskComplete(_))).await;
+    wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     assert_eq!(fs::read_to_string(&target).await?, "hello from snapshot\n");
 

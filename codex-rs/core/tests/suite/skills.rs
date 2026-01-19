@@ -64,6 +64,7 @@ async fn user_turn_includes_skill_instructions() -> Result<()> {
             items: vec![
                 UserInput::Text {
                     text: "please use $demo".to_string(),
+                    text_elements: Vec::new(),
                 },
                 UserInput::Skill {
                     name: "demo".to_string(),
@@ -77,11 +78,12 @@ async fn user_turn_includes_skill_instructions() -> Result<()> {
             model: session_model,
             effort: None,
             summary: codex_protocol::config_types::ReasoningSummary::Auto,
+            collaboration_mode: None,
         })
         .await?;
 
     core_test_support::wait_for_event(test.codex.as_ref(), |event| {
-        matches!(event, codex_core::protocol::EventMsg::TaskComplete(_))
+        matches!(event, codex_core::protocol::EventMsg::TurnComplete(_))
     })
     .await;
 

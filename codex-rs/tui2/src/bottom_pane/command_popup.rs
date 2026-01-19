@@ -15,6 +15,13 @@ use codex_protocol::custom_prompts::CustomPrompt;
 use codex_protocol::custom_prompts::PROMPTS_CMD_PREFIX;
 use std::collections::HashSet;
 
+fn windows_degraded_sandbox_active() -> bool {
+    cfg!(target_os = "windows")
+        && codex_core::windows_sandbox::ELEVATED_SANDBOX_NUX_ENABLED
+        && codex_core::get_platform_sandbox().is_some()
+        && !codex_core::is_windows_elevated_sandbox_enabled()
+}
+
 /// A selectable item in the popup: either a built-in command or a user prompt.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CommandItem {
@@ -32,9 +39,11 @@ pub(crate) struct CommandPopup {
 
 impl CommandPopup {
     pub(crate) fn new(mut prompts: Vec<CustomPrompt>, skills_enabled: bool) -> Self {
+        let allow_elevate_sandbox = windows_degraded_sandbox_active();
         let builtins: Vec<(&'static str, SlashCommand)> = built_in_slash_commands()
             .into_iter()
             .filter(|(_, cmd)| skills_enabled || *cmd != SlashCommand::Skills)
+            .filter(|(_, cmd)| allow_elevate_sandbox || *cmd != SlashCommand::ElevateSandbox)
             .collect();
         // Exclude prompts that collide with builtin command names and sort by name.
         let exclude: HashSet<String> = builtins.iter().map(|(n, _)| (*n).to_string()).collect();
@@ -104,8 +113,8 @@ impl CommandPopup {
     }
 
     /// Compute fuzzy-filtered matches over built-in commands and user prompts,
-    /// paired with optional highlight indices and score. Sorted by ascending
-    /// score, then by name for stability.
+    /// paired with optional highlight indices and score. Preserves the original
+    /// presentation order for built-ins and prompts.
     fn filtered(&self) -> Vec<(CommandItem, Option<Vec<usize>>, i32)> {
         let filter = self.command_filter.trim();
         let mut out: Vec<(CommandItem, Option<Vec<usize>>, i32)> = Vec::new();
@@ -135,20 +144,6 @@ impl CommandPopup {
                 out.push((CommandItem::UserPrompt(idx), Some(indices), score));
             }
         }
-        // When filtering, sort by ascending score and then by name for stability.
-        out.sort_by(|a, b| {
-            a.2.cmp(&b.2).then_with(|| {
-                let an = match a.0 {
-                    CommandItem::Builtin(c) => c.command(),
-                    CommandItem::UserPrompt(i) => &self.prompts[i].name,
-                };
-                let bn = match b.0 {
-                    CommandItem::Builtin(c) => c.command(),
-                    CommandItem::UserPrompt(i) => &self.prompts[i].name,
-                };
-                an.cmp(bn)
-            })
-        });
         out
     }
 
@@ -280,6 +275,22 @@ mod tests {
             }
             None => panic!("expected at least one match for '/mo'"),
         }
+    }
+
+    #[test]
+    fn filtered_commands_keep_presentation_order() {
+        let mut popup = CommandPopup::new(Vec::new(), false);
+        popup.on_composer_text_change("/m".to_string());
+
+        let cmds: Vec<&str> = popup
+            .filtered_items()
+            .into_iter()
+            .filter_map(|item| match item {
+                CommandItem::Builtin(cmd) => Some(cmd.command()),
+                CommandItem::UserPrompt(_) => None,
+            })
+            .collect();
+        assert_eq!(cmds, vec!["model", "resume", "compact", "mention", "mcp"]);
     }
 
     #[test]
