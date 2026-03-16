@@ -122,6 +122,7 @@ fn event_msg_persistence_mode(ev: &EventMsg) -> Option<EventPersistenceMode> {
         | EventMsg::PatchApplyEnd(_)
         | EventMsg::McpToolCallEnd(_)
         | EventMsg::ViewImageToolCall(_)
+        | EventMsg::ReadPdfToolCall(_)
         | EventMsg::ImageGenerationEnd(_)
         | EventMsg::CollabAgentSpawnEnd(_)
         | EventMsg::CollabAgentInteractionEnd(_)

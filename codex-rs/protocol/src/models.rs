@@ -781,6 +781,9 @@ fn local_image_error_placeholder(
 
 pub const VIEW_IMAGE_TOOL_NAME: &str = "view_image";
 
+pub const READ_PDF_TOOL_NAME: &str = "read_pdf";
+
+
 const IMAGE_OPEN_TAG: &str = "<image>";
 const IMAGE_CLOSE_TAG: &str = "</image>";
 const LOCAL_IMAGE_OPEN_TAG_PREFIX: &str = "<image name=";
@@ -1102,6 +1105,11 @@ pub enum FunctionCallOutputContentItem {
         #[ts(optional)]
         detail: Option<ImageDetail>,
     },
+    // Do not rename, these are serialized and used directly in the responses API.
+    InputFile {
+        filename: String,
+        file_data: String, // base64-encoded file bytes
+    },
 }
 
 /// Converts structured function-call output content into plain text for
@@ -1125,7 +1133,8 @@ pub fn function_call_output_content_items_to_text(
                 Some(text.as_str())
             }
             FunctionCallOutputContentItem::InputText { .. }
-            | FunctionCallOutputContentItem::InputImage { .. } => None,
+            | FunctionCallOutputContentItem::InputImage { .. }
+            | FunctionCallOutputContentItem::InputFile { .. } => None,
         })
         .collect::<Vec<_>>();
 

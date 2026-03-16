@@ -34,6 +34,8 @@ use codex_protocol::config_types::WebSearchConfig;
 use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
 use codex_protocol::models::VIEW_IMAGE_TOOL_NAME;
+use codex_protocol::models::READ_PDF_TOOL_NAME;
+
 use codex_protocol::openai_models::ApplyPatchToolType;
 use codex_protocol::openai_models::ConfigShellToolType;
 use codex_protocol::openai_models::InputModality;
@@ -786,6 +788,28 @@ fn create_view_image_tool(can_request_original_image_detail: bool) -> ToolSpec {
     ToolSpec::Function(ResponsesApiTool {
         name: VIEW_IMAGE_TOOL_NAME.to_string(),
         description: "View a local image from the filesystem (only use if given a full filepath by the user, and the image isn't already attached to the thread context within <image ...> tags)."
+            .to_string(),
+        strict: false,
+        defer_loading: None,
+        parameters: JsonSchema::Object {
+            properties,
+            required: Some(vec!["path".to_string()]),
+            additional_properties: Some(false.into()),
+        },
+        output_schema: None,
+    })
+}
+
+fn create_read_pdf_tool() -> ToolSpec {
+    let properties = BTreeMap::from([(
+        "path".to_string(),
+        JsonSchema::String {
+            description: Some("Local filesystem path to a PDF file".to_string()),
+        },
+    )]);
+    ToolSpec::Function(ResponsesApiTool {
+        name: READ_PDF_TOOL_NAME.to_string(),
+        description: "Read a local PDF file from the filesystem (only use if given a full filepath by the user)."
             .to_string(),
         strict: false,
         defer_loading: None,
@@ -2316,6 +2340,7 @@ pub(crate) fn build_specs_with_discoverable_tools(
     use crate::tools::handlers::ToolSuggestHandler;
     use crate::tools::handlers::UnifiedExecHandler;
     use crate::tools::handlers::ViewImageHandler;
+    use crate::tools::handlers::ReadPdfHandler;
     use std::sync::Arc;
 
     let mut builder = ToolRegistryBuilder::new();
@@ -2326,6 +2351,7 @@ pub(crate) fn build_specs_with_discoverable_tools(
     let apply_patch_handler = Arc::new(ApplyPatchHandler);
     let dynamic_tool_handler = Arc::new(DynamicToolHandler);
     let view_image_handler = Arc::new(ViewImageHandler);
+    let read_pdf_handler = Arc::new(ReadPdfHandler);
     let mcp_handler = Arc::new(McpHandler);
     let mcp_resource_handler = Arc::new(McpResourceHandler);
     let shell_command_handler = Arc::new(ShellCommandHandler::from(config.shell_command_backend));
@@ -2666,6 +2692,19 @@ pub(crate) fn build_specs_with_discoverable_tools(
         config.code_mode_enabled,
     );
     builder.register_handler("view_image", view_image_handler);
+
+    if config
+        .experimental_supported_tools
+        .contains(&"read_pdf".to_string())
+    {
+        push_tool_spec(
+            &mut builder,
+            create_read_pdf_tool(),
+            true,
+            config.code_mode_enabled,
+        );
+        builder.register_handler("read_pdf", read_pdf_handler);
+    }
 
     if config.artifact_tools {
         push_tool_spec(

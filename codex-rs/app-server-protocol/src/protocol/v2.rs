@@ -3965,6 +3965,9 @@ pub enum ThreadItem {
     ImageView { id: String, path: String },
     #[serde(rename_all = "camelCase")]
     #[ts(rename_all = "camelCase")]
+    PdfView { id: String, path: String },
+    #[serde(rename_all = "camelCase")]
+    #[ts(rename_all = "camelCase")]
     ImageGeneration {
         id: String,
         status: String,
@@ -3996,6 +3999,7 @@ impl ThreadItem {
             | ThreadItem::CollabAgentToolCall { id, .. }
             | ThreadItem::WebSearch { id, .. }
             | ThreadItem::ImageView { id, .. }
+            | ThreadItem::PdfView { id, .. }
             | ThreadItem::ImageGeneration { id, .. }
             | ThreadItem::EnteredReviewMode { id, .. }
             | ThreadItem::ExitedReviewMode { id, .. }

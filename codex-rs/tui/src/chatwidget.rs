@@ -140,6 +140,7 @@ use codex_protocol::protocol::UndoCompletedEvent;
 use codex_protocol::protocol::UndoStartedEvent;
 use codex_protocol::protocol::UserMessageEvent;
 use codex_protocol::protocol::ViewImageToolCallEvent;
+use codex_protocol::protocol::ReadPdfToolCallEvent;
 use codex_protocol::protocol::WarningEvent;
 use codex_protocol::protocol::WebSearchBeginEvent;
 use codex_protocol::protocol::WebSearchEndEvent;
@@ -2370,6 +2371,15 @@ impl ChatWidget {
     fn on_view_image_tool_call(&mut self, event: ViewImageToolCallEvent) {
         self.flush_answer_stream_with_separator();
         self.add_to_history(history_cell::new_view_image_tool_call(
+            event.path,
+            &self.config.cwd,
+        ));
+        self.request_redraw();
+    }
+
+    fn on_read_pdf_tool_call(&mut self, event: ReadPdfToolCallEvent) {
+        self.flush_answer_stream_with_separator();
+        self.add_to_history(history_cell::new_read_pdf_tool_call(
             event.path,
             &self.config.cwd,
         ));
@@ -4976,6 +4986,7 @@ impl ChatWidget {
             EventMsg::PatchApplyEnd(ev) => self.on_patch_apply_end(ev),
             EventMsg::ExecCommandEnd(ev) => self.on_exec_command_end(ev),
             EventMsg::ViewImageToolCall(ev) => self.on_view_image_tool_call(ev),
+            EventMsg::ReadPdfToolCall(ev) => self.on_read_pdf_tool_call(ev),
             EventMsg::ImageGenerationBegin(ev) => self.on_image_generation_begin(ev),
             EventMsg::ImageGenerationEnd(ev) => self.on_image_generation_end(ev),
             EventMsg::McpToolCallBegin(ev) => self.on_mcp_tool_call_begin(ev),

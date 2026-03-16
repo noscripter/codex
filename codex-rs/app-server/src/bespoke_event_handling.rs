@@ -1281,6 +1281,28 @@ pub(crate) async fn apply_bespoke_event_handling(
                 .send_server_notification(ServerNotification::ItemCompleted(completed))
                 .await;
         }
+        EventMsg::ReadPdfToolCall(read_pdf_event) => {
+            let item = ThreadItem::PdfView {
+                id: read_pdf_event.call_id.clone(),
+                path: read_pdf_event.path.to_string_lossy().into_owned(),
+            };
+            let started = ItemStartedNotification {
+                thread_id: conversation_id.to_string(),
+                turn_id: event_turn_id.clone(),
+                item: item.clone(),
+            };
+            outgoing
+                .send_server_notification(ServerNotification::ItemStarted(started))
+                .await;
+            let completed = ItemCompletedNotification {
+                thread_id: conversation_id.to_string(),
+                turn_id: event_turn_id.clone(),
+                item,
+            };
+            outgoing
+                .send_server_notification(ServerNotification::ItemCompleted(completed))
+                .await;
+        }
         EventMsg::EnteredReviewMode(review_request) => {
             let review = review_request
                 .user_facing_hint

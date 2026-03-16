@@ -2235,6 +2235,18 @@ pub(crate) fn new_view_image_tool_call(path: PathBuf, cwd: &Path) -> PlainHistor
     PlainHistoryCell { lines }
 }
 
+pub(crate) fn new_read_pdf_tool_call(path: PathBuf, cwd: &Path) -> PlainHistoryCell {
+    let display_path = display_path_for(&path, cwd);
+
+    let lines: Vec<Line<'static>> = vec![
+        vec!["• ".dim(), "Read PDF".bold()].into(),
+        vec!["  └ ".dim(), display_path.dim()].into(),
+    ];
+
+    PlainHistoryCell { lines }
+}
+
+
 pub(crate) fn new_image_generation_call(
     call_id: String,
     revised_prompt: Option<String>,

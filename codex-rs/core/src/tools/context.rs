@@ -350,7 +350,8 @@ fn content_items_to_code_mode_result(items: &[FunctionCallOutputContentItem]) ->
                     Some(image_url.clone())
                 }
                 FunctionCallOutputContentItem::InputText { .. }
-                | FunctionCallOutputContentItem::InputImage { .. } => None,
+                | FunctionCallOutputContentItem::InputImage { .. }
+                | FunctionCallOutputContentItem::InputFile { .. } => None,
             })
             .collect::<Vec<_>>()
             .join("\n"),

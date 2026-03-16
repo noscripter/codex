@@ -353,6 +353,7 @@ async fn run_codex_tool_session_inner(
                     | EventMsg::UserMessage(_)
                     | EventMsg::ShutdownComplete
                     | EventMsg::ViewImageToolCall(_)
+                    | EventMsg::ReadPdfToolCall(_)
                     | EventMsg::ImageGenerationBegin(_)
                     | EventMsg::ImageGenerationEnd(_)
                     | EventMsg::RawResponseItem(_)

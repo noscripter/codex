@@ -104,6 +104,7 @@ pub(crate) fn formatted_truncate_text_content_items_with_policy(
         .filter_map(|item| match item {
             FunctionCallOutputContentItem::InputText { text } => Some(text.as_str()),
             FunctionCallOutputContentItem::InputImage { .. } => None,
+            FunctionCallOutputContentItem::InputFile { .. } => None,
         })
         .collect::<Vec<_>>();
 
@@ -131,6 +132,12 @@ pub(crate) fn formatted_truncate_text_content_items_with_policy(
             Some(FunctionCallOutputContentItem::InputImage {
                 image_url: image_url.clone(),
                 detail: *detail,
+            })
+        }
+        FunctionCallOutputContentItem::InputFile { filename, file_data } => {
+            Some(FunctionCallOutputContentItem::InputFile {
+                filename: filename.clone(),
+                file_data: file_data.clone(),
             })
         }
         FunctionCallOutputContentItem::InputText { .. } => None,
@@ -187,6 +194,12 @@ pub(crate) fn truncate_function_output_items_with_policy(
                 out.push(FunctionCallOutputContentItem::InputImage {
                     image_url: image_url.clone(),
                     detail: *detail,
+                });
+            }
+            FunctionCallOutputContentItem::InputFile { filename, file_data } => {
+                out.push(FunctionCallOutputContentItem::InputFile {
+                    filename: filename.clone(),
+                    file_data: file_data.clone(),
                 });
             }
         }

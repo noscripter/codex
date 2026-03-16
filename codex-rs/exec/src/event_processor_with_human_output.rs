@@ -677,6 +677,14 @@ impl EventProcessor for EventProcessorWithHumanOutput {
                     view.path.display()
                 );
             }
+            EventMsg::ReadPdfToolCall(pdf) => {
+                ts_msg!(
+                    self,
+                    "{} {}",
+                    "read PDF".style(self.magenta),
+                    pdf.path.display()
+                );
+            }
             EventMsg::TurnAborted(abort_reason) => {
                 match abort_reason.reason {
                     TurnAbortReason::Interrupted => {

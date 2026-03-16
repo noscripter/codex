@@ -1174,6 +1174,9 @@ pub enum EventMsg {
     /// Notification that the agent attached a local image via the view_image tool.
     ViewImageToolCall(ViewImageToolCallEvent),
 
+    /// Notification that the agent attached a local PDF via the read_pdf tool.
+    ReadPdfToolCall(ReadPdfToolCallEvent),
+
     ExecApprovalRequest(ExecApprovalRequestEvent),
 
     RequestPermissions(RequestPermissionsEvent),
@@ -2622,6 +2625,15 @@ pub struct ViewImageToolCallEvent {
     /// Local filesystem path provided to the tool.
     pub path: PathBuf,
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+pub struct ReadPdfToolCallEvent {
+    /// Identifier for the originating tool call.
+    pub call_id: String,
+    /// Local filesystem path provided to the tool.
+    pub path: PathBuf,
+}
+
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]

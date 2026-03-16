@@ -1528,7 +1528,9 @@ fn split_exec_result_content_items(
             };
             (text, content_items)
         }
-        Some(FunctionCallOutputContentItem::InputImage { .. }) | None => {
+        Some(FunctionCallOutputContentItem::InputImage { .. })
+        | Some(FunctionCallOutputContentItem::InputFile { .. })
+        | None => {
             (String::new(), content_items)
         }
     }

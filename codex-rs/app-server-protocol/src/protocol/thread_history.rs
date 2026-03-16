@@ -46,6 +46,7 @@ use codex_protocol::protocol::TurnCompleteEvent;
 use codex_protocol::protocol::TurnStartedEvent;
 use codex_protocol::protocol::UserMessageEvent;
 use codex_protocol::protocol::ViewImageToolCallEvent;
+use codex_protocol::protocol::ReadPdfToolCallEvent;
 use codex_protocol::protocol::WebSearchBeginEvent;
 use codex_protocol::protocol::WebSearchEndEvent;
 use std::collections::HashMap;
@@ -143,6 +144,7 @@ impl ThreadHistoryBuilder {
             EventMsg::McpToolCallBegin(payload) => self.handle_mcp_tool_call_begin(payload),
             EventMsg::McpToolCallEnd(payload) => self.handle_mcp_tool_call_end(payload),
             EventMsg::ViewImageToolCall(payload) => self.handle_view_image_tool_call(payload),
+            EventMsg::ReadPdfToolCall(payload) => self.handle_read_pdf_tool_call(payload),
             EventMsg::ImageGenerationBegin(payload) => self.handle_image_generation_begin(payload),
             EventMsg::ImageGenerationEnd(payload) => self.handle_image_generation_end(payload),
             EventMsg::CollabAgentSpawnBegin(payload) => {
@@ -517,6 +519,14 @@ impl ThreadHistoryBuilder {
 
     fn handle_view_image_tool_call(&mut self, payload: &ViewImageToolCallEvent) {
         let item = ThreadItem::ImageView {
+            id: payload.call_id.clone(),
+            path: payload.path.to_string_lossy().into_owned(),
+        };
+        self.upsert_item_in_current_turn(item);
+    }
+
+    fn handle_read_pdf_tool_call(&mut self, payload: &ReadPdfToolCallEvent) {
+        let item = ThreadItem::PdfView {
             id: payload.call_id.clone(),
             path: payload.path.to_string_lossy().into_owned(),
         };
