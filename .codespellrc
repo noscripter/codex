@@ -1,6 +1,11 @@
 [codespell]
 # Ref: https://github.com/codespell-project/codespell#using-a-config-file
+# skip: globs for paths where spelling checks are noisy or unsafe (lockfiles, snapshots, minified JS, this file).
 skip = .git*,vendor,*-lock.yaml,*.lock,.codespellrc,*test.ts,*.jsonl,frame*.txt,*.snap,*.snap.new,*meriyah.umd.min.js
 check-hidden = true
+# Lines matching this regex are skipped entirely: JSON lines with embedded base64-ish "image/..." payloads,
+# and the Jest/Playwright hook name `afterAll` (codespell flags it as a typo).
 ignore-regex = ^\s*"image/\S+": ".*|\b(afterAll)\b
+# False positives: crate/product names (ratatui), serde `ser` modules, iTerm variants, "te" fragments in
+# identifiers, Windows APIs (PASE, SEH). Add new entries only when CI proves a repeated false positive.
 ignore-words-list = ratatui,ser,iTerm,iterm2,iterm,te,TE,PASE,SEH

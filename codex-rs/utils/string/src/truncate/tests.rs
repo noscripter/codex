@@ -1,3 +1,4 @@
+use super::approx_token_count;
 use super::split_string;
 use super::truncate_middle_chars;
 use super::truncate_middle_with_token_budget;
@@ -82,6 +83,23 @@ fn split_string_respects_utf8_boundaries() {
         ),
         (1, "😀😀", "😀😀")
     );
+}
+
+#[test]
+fn approx_token_count_empty_is_zero() {
+    assert_eq!(approx_token_count(""), 0);
+}
+
+#[test]
+fn truncate_middle_chars_empty_string() {
+    assert_eq!(truncate_middle_chars("", 10), "");
+}
+
+#[test]
+fn truncate_with_token_budget_empty_string() {
+    let (out, original) = truncate_middle_with_token_budget("", 10);
+    assert_eq!(out, "");
+    assert_eq!(original, None);
 }
 
 #[test]

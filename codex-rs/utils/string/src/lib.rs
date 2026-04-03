@@ -71,14 +71,13 @@ pub fn sanitize_metric_tag_value(value: &str) -> String {
 }
 
 /// Find all UUIDs in a string.
-#[allow(clippy::unwrap_used)]
 pub fn find_uuids(s: &str) -> Vec<String> {
     static RE: std::sync::OnceLock<regex_lite::Regex> = std::sync::OnceLock::new();
     let re = RE.get_or_init(|| {
         regex_lite::Regex::new(
             r"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}",
         )
-        .unwrap() // Unwrap is safe thanks to the tests.
+        .expect("static UUID regex pattern is valid")
     });
 
     re.find_iter(s).map(|m| m.as_str().to_string()).collect()
@@ -125,6 +124,8 @@ mod tests {
     use super::find_uuids;
     use super::normalize_markdown_hash_location_suffix;
     use super::sanitize_metric_tag_value;
+    use super::take_bytes_at_char_boundary;
+    use super::take_last_bytes_at_char_boundary;
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -181,5 +182,35 @@ mod tests {
             normalize_markdown_hash_location_suffix("#L74C3-L76C9"),
             Some(":74:3-76:9".to_string())
         );
+    }
+
+    #[test]
+    fn take_bytes_at_char_boundary_empty_and_zero() {
+        assert_eq!(take_bytes_at_char_boundary("", 10), "");
+        assert_eq!(take_bytes_at_char_boundary("abc", 0), "");
+    }
+
+    #[test]
+    fn take_bytes_at_char_boundary_splits_on_utf8_char_boundary() {
+        let s = "😀ab";
+        assert_eq!(take_bytes_at_char_boundary(s, 1), "");
+        assert_eq!(take_bytes_at_char_boundary(s, 4), "😀");
+        assert_eq!(take_bytes_at_char_boundary(s, 5), "😀a");
+    }
+
+    #[test]
+    fn take_last_bytes_at_char_boundary_empty_and_full() {
+        assert_eq!(take_last_bytes_at_char_boundary("", 3), "");
+        assert_eq!(take_last_bytes_at_char_boundary("hi", 10), "hi");
+    }
+
+    #[test]
+    fn take_last_bytes_at_char_boundary_suffix_respects_utf8() {
+        let s = "ab😀";
+        // Budget too small for the trailing emoji: algorithm stops before adding partial multibyte chars.
+        assert_eq!(take_last_bytes_at_char_boundary(s, 1), "");
+        assert_eq!(take_last_bytes_at_char_boundary(s, 4), "😀");
+        assert_eq!(take_last_bytes_at_char_boundary(s, 5), "b😀");
+        assert_eq!(take_last_bytes_at_char_boundary("hello", 3), "llo");
     }
 }

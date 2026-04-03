@@ -18,6 +18,12 @@ You can also install via Homebrew (`brew install --cask codex`) or download a pl
 - First run with Codex? Start with [`docs/getting-started.md`](../docs/getting-started.md) (links to the walkthrough for prompts, keyboard shortcuts, and session management).
 - Want deeper control? See [`docs/config.md`](../docs/config.md) and [`docs/install.md`](../docs/install.md).
 
+### Developing in this workspace
+
+- Build and install steps: [`docs/install.md`](../docs/install.md).
+- Rust conventions, formatting, tests, and API rules for this repo: [`AGENTS.md`](../AGENTS.md) at the repository root.
+- Common automation lives in the repo-root `justfile` (run `just --list` from the repo root after installing [`just`](https://github.com/casey/just)).
+
 ## What's new in the Rust CLI
 
 The Rust implementation is now the maintained Codex CLI and serves as the default experience. It includes a number of features that the legacy TypeScript CLI never supported.
